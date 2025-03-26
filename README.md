@@ -5,4 +5,4 @@ and `privkey.pem` files.
 
 Usage:
 
-./hubitat-ssl-certificate.py certs/example.com/hubitat.example.com/
+hubitat-ssl-certificate --username "${USERNAME}" --password "${PASSWORD}" --fqdn "${FQDN}" "${CERT_DIR}"

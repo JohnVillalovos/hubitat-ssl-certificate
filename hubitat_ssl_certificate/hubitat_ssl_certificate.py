@@ -146,8 +146,8 @@ class Hubitat:
     def reboot(self) -> bool:
         assert self.logged_in, "Must be logged in"
         reboot_url = urllib.parse.urljoin(base=self._base_url, url="hub/reboot")
-        data = {"rebuildDatabase": False, "purgeLogs": False}
-        result = self.session.request(method="POST", url=reboot_url, data=data)
+        payload = {"rebuildDatabase": False, "purgeLogs": False}
+        result = self.session.request(method="POST", url=reboot_url, json=payload)
         if result.status_code == 200:
             print(f"{self.fqdn!r} has been rebooted")
             return True

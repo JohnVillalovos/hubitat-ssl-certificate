@@ -46,7 +46,11 @@ def main() -> int:
 
     if not args.dry_run:
         if hubitat.update_certificate(certificate=certificate, private_key=private_key):
-            hubitat.reboot()
+            if not hubitat.reboot(no_reboot=args.no_reboot):
+                return 1
+        else:
+            print("An error occurred when attempting to update the certificate")
+            return 1
     else:
         print("--dry-run specified. Will not update certificate")
 
@@ -134,7 +138,7 @@ class Hubitat:
             print(result.text)
             print("POST:", result)
         if result.status_code == 200:
-            print("Certificate updated successfully. Please reboot the Hubitat device")
+            print("Certificate updated successfully.")
             return True
         print("POST:", result)
         print(result.text)
@@ -143,8 +147,15 @@ class Hubitat:
         print("ERROR: Failed to update the certificate")
         return False
 
-    def reboot(self) -> bool:
+    def reboot(self, *, no_reboot: bool) -> bool:
         assert self.logged_in, "Must be logged in"
+        if no_reboot:
+            print(
+                "--no-reboot specified. The Hubitat device was not automatically "
+                "rebooted."
+            )
+            print("Please reboot the Hubitat device")
+            return True
         reboot_url = urllib.parse.urljoin(base=self._base_url, url="hub/reboot")
         payload = {"rebuildDatabase": False, "purgeLogs": False}
         result = self.session.request(method="POST", url=reboot_url, json=payload)
@@ -186,6 +197,7 @@ class ProgramArgs:
     debug: bool
     dry_run: bool
     fqdn: str
+    no_reboot: bool
     password: str
     username: str
 
@@ -195,6 +207,11 @@ def parse_args() -> ProgramArgs:
 
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-n", "--dry-run", action="store_true")
+    parser.add_argument(
+        "--no-reboot",
+        action="store_true",
+        help="Don't reboot the Hubitat after installing the certificate",
+    )
     parser.add_argument(
         "-u", "--username", help="Username to use to login", required=True
     )

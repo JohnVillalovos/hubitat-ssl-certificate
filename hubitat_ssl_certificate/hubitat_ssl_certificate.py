@@ -21,7 +21,6 @@ import argparse
 import dataclasses
 import http.client
 import logging
-import os
 import pathlib
 import pprint
 import sys
@@ -87,7 +86,7 @@ class Hubitat:
         self._base_url = f"https://{self.fqdn}/"
 
     def login(self) -> None:
-        login_url = os.path.join(self._base_url, "login")
+        login_url = urllib.parse.urljoin(base=self._base_url, url="login")
 
         data = {"username": self.username, "password": self.password, "submit": "Login"}
         if self.debug:
@@ -118,8 +117,8 @@ class Hubitat:
 
     def update_certificate(self, *, certificate: str, private_key: str) -> bool:
         assert self.logged_in, "Must be logged in"
-        cert_config_url = os.path.join(
-            self._base_url, "hub", "advanced", "certificate", "save"
+        cert_config_url = urllib.parse.urljoin(
+            base=self._base_url, url="hub/advanced/certificate/save"
         )
         data = {
             "certificate": certificate.replace("\n", "\r\n"),
@@ -146,7 +145,7 @@ class Hubitat:
 
     def reboot(self) -> bool:
         assert self.logged_in, "Must be logged in"
-        reboot_url = os.path.join(self._base_url, "hub", "reboot")
+        reboot_url = urllib.parse.urljoin(base=self._base_url, url="hub/reboot")
         data = {"rebuildDatabase": False, "purgeLogs": False}
         result = self.session.request(method="POST", url=reboot_url, data=data)
         if result.status_code == 200:

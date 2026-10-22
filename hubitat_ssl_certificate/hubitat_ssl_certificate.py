@@ -37,8 +37,8 @@ def main() -> int:
         print(args)
         enable_debug()
 
-    certificate = get_certificate(cert_dir=args.cert_dir)
-    private_key = get_private_key(cert_dir=args.cert_dir)
+    certificate = get_certificate(cert_dir=args.cert_dir, cert_file=args.cert)
+    private_key = get_private_key(cert_dir=args.cert_dir, key_file=args.key)
     hubitat = Hubitat(
         fqdn=args.fqdn, username=args.username, password=args.password, debug=args.debug
     )
@@ -59,16 +59,30 @@ def main() -> int:
     return 0
 
 
-def get_certificate(*, cert_dir: pathlib.Path) -> str:
-    assert cert_dir.is_dir()
-    with open(cert_dir / "fullchain.pem", "r", encoding="utf-8") as in_file:
+def get_certificate(
+    *, cert_dir: pathlib.Path | None = None, cert_file: pathlib.Path | None = None
+) -> str:
+    if cert_file is None:
+        assert cert_dir is not None, "cert_dir or cert_file must be specified"
+        assert cert_dir.is_dir(), f"{cert_dir} is not a directory"
+        cert_file = cert_dir / "fullchain.pem"
+    assert cert_file.is_file(), f"{cert_file} is not a file"
+
+    with open(cert_file, "r", encoding="utf-8") as in_file:
         content = in_file.read()
     return content
 
 
-def get_private_key(*, cert_dir: pathlib.Path) -> str:
-    assert cert_dir.is_dir()
-    with open(cert_dir / "privkey.pem", "r", encoding="utf-8") as in_file:
+def get_private_key(
+    *, cert_dir: pathlib.Path | None = None, key_file: pathlib.Path | None = None
+) -> str:
+    if key_file is None:
+        assert cert_dir is not None, "cert_dir or key_file must be specified"
+        assert cert_dir.is_dir(), f"{cert_dir} is not a directory"
+        key_file = cert_dir / "privkey.pem"
+    assert key_file.is_file(), f"{key_file} is not a file"
+
+    with open(key_file, "r", encoding="utf-8") as in_file:
         content = in_file.read()
     return content
 
@@ -244,7 +258,9 @@ def enable_debug() -> None:
 
 @dataclasses.dataclass(kw_only=True)
 class ProgramArgs:
-    cert_dir: pathlib.Path
+    cert_dir: pathlib.Path | None
+    cert: pathlib.Path | None
+    key: pathlib.Path | None
     debug: bool
     dry_run: bool
     fqdn: str
@@ -253,7 +269,7 @@ class ProgramArgs:
     username: str
 
 
-def parse_args() -> ProgramArgs:
+def parse_args(argv: list[str] | None = None) -> ProgramArgs:
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-d", "--debug", action="store_true")
@@ -278,11 +294,37 @@ def parse_args() -> ProgramArgs:
         ),
         required=True,
     )
-    parser.add_argument("cert_dir")
+    parser.add_argument(
+        "cert_dir", nargs="?", help="Directory containing fullchain.pem and privkey.pem"
+    )
+    parser.add_argument(
+        "-c", "--cert", help="Certificate file; requires --key and excludes cert_dir"
+    )
+    parser.add_argument(
+        "-k", "--key", help="Private key file; requires --cert and excludes cert_dir"
+    )
 
-    args = parser.parse_args()
-    args.cert_dir = pathlib.Path(args.cert_dir).expanduser().resolve()
-    assert args.cert_dir.is_dir(), f"{args.cert_dir} is not a directory"
+    args = parser.parse_args(argv)
+
+    if args.cert_dir is not None and (args.cert is not None or args.key is not None):
+        parser.error("cert_dir cannot be combined with --cert or --key")
+    if (args.cert is None) != (args.key is None):
+        parser.error("--cert and --key must be specified together")
+    if args.cert_dir is None and args.cert is None:
+        parser.error("specify cert_dir or both --cert and --key")
+
+    if args.cert_dir is not None:
+        args.cert_dir = pathlib.Path(args.cert_dir).expanduser().resolve()
+        if not args.cert_dir.is_dir():
+            parser.error(f"cert_dir: {args.cert_dir} is not a directory")
+    else:
+        args.cert = pathlib.Path(args.cert).expanduser().resolve()
+        args.key = pathlib.Path(args.key).expanduser().resolve()
+        if not args.cert.is_file():
+            parser.error(f"--cert: {args.cert} is not a file")
+        if not args.key.is_file():
+            parser.error(f"--key: {args.key} is not a file")
+
     return ProgramArgs(**vars(args))
 
 

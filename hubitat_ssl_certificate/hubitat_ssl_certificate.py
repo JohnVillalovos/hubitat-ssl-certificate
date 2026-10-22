@@ -46,6 +46,8 @@ def main() -> int:
 
     if not args.dry_run:
         if hubitat.update_certificate(certificate=certificate, private_key=private_key):
+            if not hubitat.enable_ssl(certificate=certificate, private_key=private_key):
+                return 1
             if not hubitat.reboot(no_reboot=args.no_reboot):
                 return 1
         else:
@@ -79,6 +81,8 @@ class Hubitat:
     debug: bool = False
     _base_url: str = dataclasses.field(init=False)
     logged_in: bool = dataclasses.field(init=False, default=False)
+    # Legacy save also enables SSL, so skip the separate enable request afterward.
+    _legacy_save_enabled_ssl: bool = dataclasses.field(init=False, default=False)
     session: requests.Session = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
@@ -121,18 +125,22 @@ class Hubitat:
 
     def update_certificate(self, *, certificate: str, private_key: str) -> bool:
         assert self.logged_in, "Must be logged in"
+        self._legacy_save_enabled_ssl = False
         cert_config_url = urllib.parse.urljoin(
-            base=self._base_url, url="hub/advanced/certificate/save"
+            base=self._base_url, url="hub/advanced/certificate/saveJson"
         )
         data = {
             "certificate": certificate.replace("\n", "\r\n"),
             "privateKey": private_key.replace("\n", "\r\n"),
-            "toggleSSLEnableFlag": "on",
-            "_action_update": "Save key pair",
         }
         if self.debug:
             pprint.pprint(data)
         result = self.session.request(method="POST", url=cert_config_url, data=data)
+        if result.status_code in (404, 405):
+            print("Certificate upload endpoint unavailable; trying legacy save.")
+            return self._save_certificate_legacy(
+                certificate=certificate, private_key=private_key
+            )
         if self.debug:
             print("POST:", result)
             print(result.text)
@@ -145,6 +153,49 @@ class Hubitat:
         print("POST:", result)
         print()
         print("ERROR: Failed to update the certificate")
+        return False
+
+    def _save_certificate_legacy(self, *, certificate: str, private_key: str) -> bool:
+        assert self.logged_in, "Must be logged in"
+        url = urllib.parse.urljoin(self._base_url, "hub/advanced/certificate/save")
+        data = {
+            "certificate": certificate.replace("\n", "\r\n"),
+            "privateKey": private_key.replace("\n", "\r\n"),
+            "toggleSSLEnableFlag": "on",
+            "_action_update": "Save key pair",
+        }
+        result = self.session.request(method="POST", url=url, data=data)
+        if self.debug or result.status_code != 200:
+            print("POST:", result)
+            print(result.text)
+        self._legacy_save_enabled_ssl = result.status_code == 200
+        if self._legacy_save_enabled_ssl:
+            print("Certificate updated and SSL enabled using legacy save.")
+            return True
+        print("ERROR: Failed to save certificate and enable SSL using legacy save")
+        return False
+
+    def enable_ssl(self, *, certificate: str, private_key: str) -> bool:
+        assert self.logged_in, "Must be logged in"
+        if self._legacy_save_enabled_ssl:
+            return True
+        cert_config_url = urllib.parse.urljoin(
+            base=self._base_url, url="hub/toggleUISSLEnabled"
+        )
+        payload = {"toggleSSLEnableFlag": True}
+        result = self.session.request(method="POST", url=cert_config_url, json=payload)
+        if result.status_code in (404, 405):
+            print("SSL enablement endpoint unavailable; trying legacy save.")
+            return self._save_certificate_legacy(
+                certificate=certificate, private_key=private_key
+            )
+        if self.debug or result.status_code != 200:
+            print("POST:", result)
+            print(result.text)
+        if result.status_code == 200:
+            print("SSL enabled successfully.")
+            return True
+        print("ERROR: Failed to enable ssl")
         return False
 
     def reboot(self, *, no_reboot: bool) -> bool:

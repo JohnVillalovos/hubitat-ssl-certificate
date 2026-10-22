@@ -11,6 +11,10 @@ disabled with the `--no-reboot` argument.
 This assumes in the specified certificate directory there are `fullchain.pem`
 and `privkey.pem` files.
 
+If the certificate upload or SSL enablement endpoint returns HTTP 404 or 405,
+the program tries the previous combined certificate-save and SSL-enablement
+request. Other HTTP errors are reported as failures without a fallback.
+
 Usage:
 
 ```

@@ -11,6 +11,10 @@ disabled with the `--no-reboot` argument.
 This assumes in the specified certificate directory there are `fullchain.pem`
 and `privkey.pem` files.
 
+Alternatively, use `--cert /path/to/fullchain.pem --key /path/to/privkey.pem`
+instead of the certificate directory. Both options require a filename and must
+be supplied together. They cannot be combined with `cert_dir`.
+
 If the certificate upload or SSL enablement endpoint returns HTTP 404 or 405,
 the program tries the previous combined certificate-save and SSL-enablement
 request. Other HTTP errors are reported as failures without a fallback.
